@@ -1,0 +1,670 @@
+
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+print("Services loaded, LocalPlayer:", LocalPlayer.Name)
+
+-- Wait for PlayerGui
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+print("PlayerGui found")
+
+-- Get the remote event (with error handling)
+local remoteEvent
+pcall(function()
+    remoteEvent = ReplicatedStorage:WaitForChild("Packages", 5):WaitForChild("Net", 5):WaitForChild("RE/AdminPanelService/ExecuteCommand", 5)
+    print("Remote event found!")
+end)
+
+if not remoteEvent then
+    warn("Could not find remote event - commands won't work but UI will still load")
+end
+
+-- Commands with emojis and spam count
+local commandData = {
+    {name = "rocket", emoji = "🚀", spamCount = 5},
+    {name = "ragdoll", emoji = "🤸", spamCount = 3},
+    {name = "balloon", emoji = "🎈", spamCount = 4},
+    {name = "inverse", emoji = "🔄", spamCount = 2},
+    {name = "nightvision", emoji = "👁️", spamCount = 1},
+    {name = "jail", emoji = "🔒", spamCount = 2},
+    {name = "tiny", emoji = "🐜", spamCount = 3},
+    {name = "jumpscare", emoji = "👻", spamCount = 2},
+    {name = "morph", emoji = "🧠", spamCount = 2}
+}
+
+-- Variables
+local multipleMode = false
+local hotkeySelectedPlayers = {}
+local currentTargetPlayer = nil
+local playerCommandStates = {}
+local originalVolume = 0.5
+
+-- Sound muting
+pcall(function()
+    local SoundService = game:GetService("SoundService")
+    originalVolume = SoundService.Volume
+end)
+
+-- Create ScreenGui
+print("Creating ScreenGui...")
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "APSpammer"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = PlayerGui
+
+print("ScreenGui created and parented!")
+
+-- Main Frame
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 500, 0, 450)
+mainFrame.Position = UDim2.new(1, -510, 1, -460)
+mainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 12)
+mainCorner.Parent = mainFrame
+
+print("Main frame created!")
+
+-- Title
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, 0, 0, 40)
+titleLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+titleLabel.BorderSizePixel = 0
+titleLabel.Text = "P8STOL'S SPAMMER"
+titleLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 18
+titleLabel.Parent = mainFrame
+
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 12)
+titleCorner.Parent = titleLabel
+
+-- Falling snow particles on title
+local function createSnowEffect(parent)
+    for i = 1, 25 do
+        local snow = Instance.new("Frame")
+        snow.Size = UDim2.new(0, math.random(2, 4), 0, math.random(2, 4))
+        snow.Position = UDim2.new(math.random(0, 100) / 100, 0, -0.1, 0)
+        snow.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        snow.BorderSizePixel = 0
+        snow.BackgroundTransparency = math.random(30, 70) / 100
+        snow.ZIndex = 2
+        snow.Parent = parent
+        
+        local snowCorner = Instance.new("UICorner")
+        snowCorner.CornerRadius = UDim.new(1, 0)
+        snowCorner.Parent = snow
+        
+        local fallDuration = math.random(3, 6)
+        local function animateSnow()
+            while snow and snow.Parent do
+                local tween = TweenService:Create(
+                    snow,
+                    TweenInfo.new(fallDuration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut),
+                    {Position = UDim2.new(snow.Position.X.Scale, 0, 1.1, 0)}
+                )
+                tween:Play()
+                tween.Completed:Wait()
+                snow.Position = UDim2.new(math.random(0, 100) / 100, 0, -0.1, 0)
+            end
+        end
+        
+        task.spawn(animateSnow)
+    end
+end
+
+createSnowEffect(titleLabel)
+
+-- Close Button
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 35, 0, 35)
+closeBtn.Position = UDim2.new(1, -37.5, 0, 2.5)
+closeBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 16
+closeBtn.Parent = titleLabel
+
+local closeBtnCorner = Instance.new("UICorner")
+closeBtnCorner.CornerRadius = UDim.new(0, 8)
+closeBtnCorner.Parent = closeBtn
+
+closeBtn.MouseButton1Click:Connect(function()
+    print("Close button clicked!")
+    screenGui:Destroy()
+end)
+
+-- Multiple Players Checkbox
+local multiCheckFrame = Instance.new("Frame")
+multiCheckFrame.Size = UDim2.new(1, -10, 0, 30)
+multiCheckFrame.Position = UDim2.new(0, 5, 0, 45)
+multiCheckFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+multiCheckFrame.BorderSizePixel = 0
+multiCheckFrame.Parent = mainFrame
+
+local multiCheckCorner = Instance.new("UICorner")
+multiCheckCorner.CornerRadius = UDim.new(0, 8)
+multiCheckCorner.Parent = multiCheckFrame
+
+local multiCheckbox = Instance.new("TextButton")
+multiCheckbox.Size = UDim2.new(0, 22, 0, 22)
+multiCheckbox.Position = UDim2.new(0, 4, 0.5, -11)
+multiCheckbox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+multiCheckbox.Text = ""
+multiCheckbox.Parent = multiCheckFrame
+
+local multiCheckCorner2 = Instance.new("UICorner")
+multiCheckCorner2.CornerRadius = UDim.new(0, 5)
+multiCheckCorner2.Parent = multiCheckbox
+
+local multiCheckmark = Instance.new("TextLabel")
+multiCheckmark.Size = UDim2.new(1, 0, 1, 0)
+multiCheckmark.BackgroundTransparency = 1
+multiCheckmark.Text = "✓"
+multiCheckmark.TextColor3 = Color3.fromRGB(50, 255, 150)
+multiCheckmark.Font = Enum.Font.GothamBold
+multiCheckmark.TextSize = 18
+multiCheckmark.Visible = false
+multiCheckmark.Parent = multiCheckbox
+
+local multiLabel = Instance.new("TextLabel")
+multiLabel.Size = UDim2.new(1, -35, 1, 0)
+multiLabel.Position = UDim2.new(0, 30, 0, 0)
+multiLabel.BackgroundTransparency = 1
+multiLabel.Text = "Split Commands (2 Players) | Press F to spam"
+multiLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+multiLabel.Font = Enum.Font.Gotham
+multiLabel.TextSize = 12
+multiLabel.TextXAlignment = Enum.TextXAlignment.Left
+multiLabel.Parent = multiCheckFrame
+
+multiCheckbox.MouseButton1Click:Connect(function()
+    multipleMode = not multipleMode
+    multiCheckmark.Visible = multipleMode
+    multiCheckbox.BackgroundColor3 = multipleMode and Color3.fromRGB(50, 255, 150) or Color3.fromRGB(40, 40, 40)
+    print("Multiple mode:", multipleMode)
+end)
+
+-- Player List ScrollFrame
+local scrollFrame = Instance.new("ScrollingFrame")
+scrollFrame.Size = UDim2.new(1, -10, 1, -85)
+scrollFrame.Position = UDim2.new(0, 5, 0, 80)
+scrollFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+scrollFrame.BorderSizePixel = 0
+scrollFrame.ScrollBarThickness = 6
+scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(255, 50, 50)
+scrollFrame.Parent = mainFrame
+
+local scrollCorner = Instance.new("UICorner")
+scrollCorner.CornerRadius = UDim.new(0, 10)
+scrollCorner.Parent = scrollFrame
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 3)
+listLayout.Parent = scrollFrame
+
+local listPadding = Instance.new("UIPadding")
+listPadding.PaddingTop = UDim.new(0, 5)
+listPadding.PaddingBottom = UDim.new(0, 5)
+listPadding.PaddingLeft = UDim.new(0, 5)
+listPadding.PaddingRight = UDim.new(0, 5)
+listPadding.Parent = scrollFrame
+
+-- Command Menu Frame (hidden by default)
+local commandMenu = Instance.new("Frame")
+commandMenu.Size = UDim2.new(0, 350, 0, 400)
+commandMenu.Position = UDim2.new(0.5, -175, 0.5, -200)
+commandMenu.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+commandMenu.BorderSizePixel = 0
+commandMenu.Visible = false
+commandMenu.ZIndex = 10
+commandMenu.Parent = screenGui
+
+local commandMenuCorner = Instance.new("UICorner")
+commandMenuCorner.CornerRadius = UDim.new(0, 12)
+commandMenuCorner.Parent = commandMenu
+
+-- Falling snow on command menu
+createSnowEffect(commandMenu)
+
+-- Command Menu Title
+local commandTitle = Instance.new("TextLabel")
+commandTitle.Size = UDim2.new(1, 0, 0, 40)
+commandTitle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+commandTitle.BorderSizePixel = 0
+commandTitle.Text = "SELECT COMMANDS"
+commandTitle.TextColor3 = Color3.fromRGB(255, 50, 50)
+commandTitle.Font = Enum.Font.GothamBold
+commandTitle.TextSize = 16
+commandTitle.ZIndex = 11
+commandTitle.Parent = commandMenu
+
+local commandTitleCorner = Instance.new("UICorner")
+commandTitleCorner.CornerRadius = UDim.new(0, 12)
+commandTitleCorner.Parent = commandTitle
+
+-- Close Command Menu Button
+local closeCommandBtn = Instance.new("TextButton")
+closeCommandBtn.Size = UDim2.new(0, 35, 0, 35)
+closeCommandBtn.Position = UDim2.new(1, -37.5, 0, 2.5)
+closeCommandBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+closeCommandBtn.Text = "X"
+closeCommandBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeCommandBtn.Font = Enum.Font.GothamBold
+closeCommandBtn.TextSize = 16
+closeCommandBtn.ZIndex = 12
+closeCommandBtn.Parent = commandTitle
+
+local closeCommandCorner = Instance.new("UICorner")
+closeCommandCorner.CornerRadius = UDim.new(0, 8)
+closeCommandCorner.Parent = closeCommandBtn
+
+closeCommandBtn.MouseButton1Click:Connect(function()
+    commandMenu.Visible = false
+    currentTargetPlayer = nil
+    print("Command menu closed")
+end)
+
+-- Command Grid Container
+local commandGrid = Instance.new("ScrollingFrame")
+commandGrid.Size = UDim2.new(1, -20, 1, -60)
+commandGrid.Position = UDim2.new(0, 10, 0, 50)
+commandGrid.BackgroundTransparency = 1
+commandGrid.BorderSizePixel = 0
+commandGrid.ScrollBarThickness = 6
+commandGrid.ScrollBarImageColor3 = Color3.fromRGB(50, 255, 150)
+commandGrid.ZIndex = 11
+commandGrid.Parent = commandMenu
+
+local gridLayout = Instance.new("UIGridLayout")
+gridLayout.CellSize = UDim2.new(0, 100, 0, 100)
+gridLayout.CellPadding = UDim2.new(0, 10, 0, 10)
+gridLayout.Parent = commandGrid
+
+-- Function to initialize player command states
+local function initPlayerCommands(player)
+    if not playerCommandStates[player] then
+        playerCommandStates[player] = {}
+        for _, cmd in ipairs(commandData) do
+            playerCommandStates[player][cmd.name] = true
+        end
+        print("Initialized commands for", player.Name)
+    end
+end
+
+-- Function to update command button visual
+local function updateCommandButton(btn, cmdName)
+    if not currentTargetPlayer then return end
+    
+    local enabled = playerCommandStates[currentTargetPlayer][cmdName]
+    local outline = btn:FindFirstChildOfClass("UIStroke")
+    
+    if enabled then
+        outline.Color = Color3.fromRGB(50, 255, 100)
+        btn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    else
+        outline.Color = Color3.fromRGB(255, 50, 50)
+        btn.BackgroundColor3 = Color3.fromRGB(20, 10, 10)
+    end
+end
+
+-- Function to create command button
+local function createCommandButton(cmdData, index)
+    local btn = Instance.new("TextButton")
+    btn.Name = cmdData.name
+    btn.Size = UDim2.new(0, 100, 0, 100)
+    btn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    btn.Text = ""
+    btn.ZIndex = 12
+    btn.Parent = commandGrid
+    
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 10)
+    btnCorner.Parent = btn
+    
+    local outline = Instance.new("UIStroke")
+    outline.Color = Color3.fromRGB(50, 255, 150)
+    outline.Thickness = 2
+    outline.Parent = btn
+    
+    local emoji = Instance.new("TextLabel")
+    emoji.Size = UDim2.new(1, 0, 0.4, 0)
+    emoji.Position = UDim2.new(0, 0, 0, 5)
+    emoji.BackgroundTransparency = 1
+    emoji.Text = cmdData.emoji
+    emoji.TextSize = 32
+    emoji.ZIndex = 13
+    emoji.Parent = btn
+    
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, 0, 0.3, 0)
+    nameLabel.Position = UDim2.new(0, 0, 0.5, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = cmdData.name
+    nameLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 10
+    nameLabel.ZIndex = 13
+    nameLabel.Parent = btn
+    
+    local spamLabel = Instance.new("TextLabel")
+    spamLabel.Size = UDim2.new(1, 0, 0.2, 0)
+    spamLabel.Position = UDim2.new(0, 0, 0.78, 0)
+    spamLabel.BackgroundTransparency = 1
+    spamLabel.Text = "x" .. cmdData.spamCount
+    spamLabel.TextColor3 = Color3.fromRGB(255, 150, 50)
+    spamLabel.Font = Enum.Font.GothamBold
+    spamLabel.TextSize = 12
+    spamLabel.ZIndex = 13
+    spamLabel.Parent = btn
+    
+    btn.MouseButton1Click:Connect(function()
+        if currentTargetPlayer then
+            playerCommandStates[currentTargetPlayer][cmdData.name] = not playerCommandStates[currentTargetPlayer][cmdData.name]
+            updateCommandButton(btn, cmdData.name)
+            print(currentTargetPlayer.Name, cmdData.name, "=", playerCommandStates[currentTargetPlayer][cmdData.name])
+        end
+    end)
+    
+    return btn
+end
+
+-- Create all command buttons
+local commandButtons = {}
+for i, cmd in ipairs(commandData) do
+    commandButtons[cmd.name] = createCommandButton(cmd, i)
+end
+
+print("Command buttons created!")
+
+-- Function to refresh command menu for current player
+local function refreshCommandMenu()
+    if not currentTargetPlayer then return end
+    
+    commandTitle.Text = "COMMANDS FOR " .. currentTargetPlayer.Name:upper()
+    
+    for cmdName, btn in pairs(commandButtons) do
+        updateCommandButton(btn, cmdName)
+    end
+end
+
+-- Function to execute command with spam
+local function executeCommand(targetPlayer, command, spamCount)
+    if not remoteEvent then
+        warn("No remote event available!")
+        return
+    end
+    
+    pcall(function()
+        pcall(function()
+            local SoundService = game:GetService("SoundService")
+            SoundService.Volume = 0
+            task.delay(0.1, function()
+                pcall(function()
+                    SoundService.Volume = originalVolume
+                end)
+            end)
+        end)
+        
+        for i = 1, spamCount do
+            task.spawn(function()
+                local args = {targetPlayer, command}
+                remoteEvent:FireServer(unpack(args))
+            end)
+            task.wait(0.01)
+        end
+    end)
+end
+
+-- Function to get enabled commands for a specific player
+local function getEnabledCommandsForPlayer(player)
+    local enabled = {}
+    for _, cmd in ipairs(commandData) do
+        if playerCommandStates[player] and playerCommandStates[player][cmd.name] then
+            table.insert(enabled, cmd)
+        end
+    end
+    return enabled
+end
+
+-- Function to create player row
+local function createPlayerRow(player)
+    initPlayerCommands(player)
+    
+    local row = Instance.new("Frame")
+    row.Name = player.Name .. "_Row"
+    row.Size = UDim2.new(1, -10, 0, 50)
+    row.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    row.BorderSizePixel = 0
+    row.Parent = scrollFrame
+    
+    local rowCorner = Instance.new("UICorner")
+    rowCorner.CornerRadius = UDim.new(0, 8)
+    rowCorner.Parent = row
+    
+    local thumbnail = Instance.new("ImageLabel")
+    thumbnail.Size = UDim2.new(0, 40, 0, 40)
+    thumbnail.Position = UDim2.new(0, 5, 0.5, -20)
+    thumbnail.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    thumbnail.BorderSizePixel = 0
+    thumbnail.Image = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+    thumbnail.Parent = row
+    
+    local thumbCorner = Instance.new("UICorner")
+    thumbCorner.CornerRadius = UDim.new(1, 0)
+    thumbCorner.Parent = thumbnail
+    
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(0, 180, 0, 18)
+    nameLabel.Position = UDim2.new(0, 50, 0, 8)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = player.Name
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 13
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.Parent = row
+    
+    local displayLabel = Instance.new("TextLabel")
+    displayLabel.Size = UDim2.new(0, 180, 0, 15)
+    displayLabel.Position = UDim2.new(0, 50, 0, 27)
+    displayLabel.BackgroundTransparency = 1
+    displayLabel.Text = "@" .. player.DisplayName
+    displayLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+    displayLabel.Font = Enum.Font.Gotham
+    displayLabel.TextSize = 11
+    displayLabel.TextXAlignment = Enum.TextXAlignment.Left
+    displayLabel.Parent = row
+    
+    local checkbox = Instance.new("TextButton")
+    checkbox.Size = UDim2.new(0, 24, 0, 24)
+    checkbox.Position = UDim2.new(0, 240, 0.5, -12)
+    checkbox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    checkbox.Text = ""
+    checkbox.ZIndex = 2
+    checkbox.Parent = row
+    
+    local checkCorner = Instance.new("UICorner")
+    checkCorner.CornerRadius = UDim.new(0, 6)
+    checkCorner.Parent = checkbox
+    
+    local checkmark = Instance.new("TextLabel")
+    checkmark.Size = UDim2.new(1, 0, 1, 0)
+    checkmark.BackgroundTransparency = 1
+    checkmark.Text = "✓"
+    checkmark.TextColor3 = Color3.fromRGB(50, 255, 150)
+    checkmark.Font = Enum.Font.GothamBold
+    checkmark.TextSize = 18
+    checkmark.Visible = false
+    checkmark.ZIndex = 3
+    checkmark.Parent = checkbox
+    
+    local cmdBtn = Instance.new("TextButton")
+    cmdBtn.Size = UDim2.new(0, 40, 0, 40)
+    cmdBtn.Position = UDim2.new(1, -45, 0.5, -20)
+    cmdBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+    cmdBtn.Text = "C"
+    cmdBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+    cmdBtn.Font = Enum.Font.GothamBold
+    cmdBtn.TextSize = 18
+    cmdBtn.Parent = row
+    
+    local cmdCorner = Instance.new("UICorner")
+    cmdCorner.CornerRadius = UDim.new(0, 8)
+    cmdCorner.Parent = cmdBtn
+    
+    checkbox.MouseButton1Click:Connect(function()
+        local idx = table.find(hotkeySelectedPlayers, player)
+        if idx then
+            table.remove(hotkeySelectedPlayers, idx)
+            checkmark.Visible = false
+            checkbox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+            print("Deselected", player.Name)
+        else
+            if #hotkeySelectedPlayers < 2 then
+                table.insert(hotkeySelectedPlayers, player)
+                checkmark.Visible = true
+                checkbox.BackgroundColor3 = Color3.fromRGB(50, 255, 150)
+                print("Selected", player.Name)
+            end
+        end
+    end)
+    
+    cmdBtn.MouseButton1Click:Connect(function()
+        currentTargetPlayer = player
+        refreshCommandMenu()
+        commandMenu.Visible = true
+        print("Opened command menu for", player.Name)
+    end)
+    
+    return row
+end
+
+-- Function to refresh player list
+local function refreshPlayerList()
+    for _, child in ipairs(scrollFrame:GetChildren()) do
+        if child:IsA("Frame") then
+            child:Destroy()
+        end
+    end
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            createPlayerRow(player)
+        end
+    end
+    
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
+    print("Player list refreshed, players:", #Players:GetPlayers() - 1)
+end
+
+refreshPlayerList()
+
+Players.PlayerAdded:Connect(function(player)
+    print("Player added:", player.Name)
+    task.wait(0.1)
+    refreshPlayerList()
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    print("Player removing:", player.Name)
+    local idx = table.find(hotkeySelectedPlayers, player)
+    if idx then
+        table.remove(hotkeySelectedPlayers, idx)
+    end
+    playerCommandStates[player] = nil
+    task.wait(0.1)
+    refreshPlayerList()
+end)
+
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
+end)
+
+-- F key hotkey
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.KeyCode == Enum.KeyCode.F then
+        print("F key pressed! Selected players:", #hotkeySelectedPlayers)
+        
+        if #hotkeySelectedPlayers == 0 then
+            return
+        end
+        
+        if multipleMode and #hotkeySelectedPlayers == 2 then
+            print("Running in split mode")
+            local player1 = hotkeySelectedPlayers[1]
+            local player2 = hotkeySelectedPlayers[2]
+            
+            for i, cmdData in ipairs(commandData) do
+                local targetPlayer = (i % 2 == 1) and player1 or player2
+                local otherPlayer = (targetPlayer == player1) and player2 or player1
+                
+                if playerCommandStates[targetPlayer][cmdData.name] then
+                    if targetPlayer and targetPlayer.Parent then
+                        task.spawn(function()
+                            executeCommand(targetPlayer, cmdData.name, cmdData.spamCount)
+                        end)
+                        print("Executing", cmdData.name, "on", targetPlayer.Name)
+                    end
+                elseif playerCommandStates[otherPlayer][cmdData.name] then
+                    if otherPlayer and otherPlayer.Parent then
+                        task.spawn(function()
+                            executeCommand(otherPlayer, cmdData.name, cmdData.spamCount)
+                        end)
+                        print("Executing", cmdData.name, "on", otherPlayer.Name, "(redirected)")
+                    end
+                end
+            end
+        else
+            print("Running in normal mode")
+            for _, player in ipairs(hotkeySelectedPlayers) do
+                if player and player.Parent then
+                    local enabledCmds = getEnabledCommandsForPlayer(player)
+                    for _, cmdData in ipairs(enabledCmds) do
+                        task.spawn(function()
+                            executeCommand(player, cmdData.name, cmdData.spamCount)
+                        end)
+                    end
+                    print("Executed", #enabledCmds, "commands on", player.Name)
+                end
+            end
+        end
+    end
+end)
+
+-- Draggable
+local dragging = false
+local dragStart, startPos
+
+titleLabel.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        local targetPos = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        TweenService:Create(mainFrame, TweenInfo.new(0.15, Enum.EasingStyle.Quad), {Position = targetPos}):Play()
+    end
+end)
